@@ -11,7 +11,7 @@ from os.path import splitext, isfile, join
 from pathlib import Path
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
+import albumentations as A
 
 def load_image(filename):
     ext = splitext(filename)[1]
@@ -36,12 +36,13 @@ def unique_mask_values(idx, mask_dir, mask_suffix):
 
 
 class BasicDataset(Dataset):
-    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = ''):
+    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = '', transform=None):
         self.images_dir = Path(images_dir)
         self.mask_dir = Path(mask_dir)
         assert 0 < scale <= 1, 'Scale must be between 0 and 1'
         self.scale = scale
         self.mask_suffix = mask_suffix
+        self.transform = transform
 
         self.ids = [splitext(file)[0] for file in listdir(images_dir) if isfile(join(images_dir, file)) and not file.startswith('.')]
         if not self.ids:
@@ -62,7 +63,7 @@ class BasicDataset(Dataset):
         return len(self.ids)
 
     @staticmethod
-    def preprocess(mask_values, pil_img, scale, is_mask):
+    def preprocess(mask_values, pil_img, scale, is_mask, transform=None):
         w, h = pil_img.size
         newW, newH = int(scale * w), int(scale * h)
         assert newW > 0 and newH > 0, 'Scale is too small, resized images would have no pixel'
@@ -80,16 +81,27 @@ class BasicDataset(Dataset):
             return mask
 
         else:
-            if img.ndim == 2:
-                img = img[np.newaxis, ...]
+            if transform != None:
+                if img.ndim == 2:
+                    img = img[np.newaxis, ...]
+                # else:
+                #     img = img.transpose((2, 0, 1))
+
+                # if (img > 1).any():
+                #     img = img / 255.0
+
+                return img
             else:
-                img = img.transpose((2, 0, 1))
+                if img.ndim == 2:
+                    img = img[np.newaxis, ...]
+                else:
+                    img = img.transpose((2, 0, 1))
 
-            if (img > 1).any():
-                img = img / 255.0
+                if (img > 1).any():
+                    img = img / 255.0
 
-            return img
-
+                return img
+            
     def __getitem__(self, idx):
         name = self.ids[idx]
         mask_file = list(self.mask_dir.glob(name + self.mask_suffix + '.*'))
@@ -103,15 +115,26 @@ class BasicDataset(Dataset):
         assert img.size == mask.size, \
             f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
 
-        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
-        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
+        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False, transform=self.transform)
+        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True, transform=self.transform)
 
-        return {
-            'image': torch.as_tensor(img.copy()).float().contiguous(),
-            'mask': torch.as_tensor(mask.copy()).long().contiguous()
-        }
+        if self.transform is not None:
+            transformed = self.transform(image=img, mask=mask)
+            img = transformed['image']
+            mask = transformed['mask']
 
+            return {
+                # 'image': torch.as_tensor(img.copy()).float().contiguous(),
+                # 'mask': torch.as_tensor(mask.copy()).long().contiguous()
+                'image': img.float().contiguous(),
+                'mask': mask.long().contiguous()
+            }
+        else:
+            return {
+                'image': torch.as_tensor(img.copy()).float().contiguous(),
+                'mask': torch.as_tensor(mask.copy()).long().contiguous()
+            }
 
 class CarvanaDataset(BasicDataset):
-    def __init__(self, images_dir, mask_dir, scale=1):
-        super().__init__(images_dir, mask_dir, scale, mask_suffix='_mask')
+    def __init__(self, images_dir, mask_dir, scale=1, transform=None):
+        super().__init__(images_dir, mask_dir, scale, mask_suffix='_mask', transform=transform)

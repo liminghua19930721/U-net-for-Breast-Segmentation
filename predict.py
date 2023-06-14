@@ -7,6 +7,8 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 from utils.data_loading import BasicDataset
 from unet import UNet
@@ -18,7 +20,19 @@ def predict_img(net,
                 scale_factor=1,
                 out_threshold=0.5):
     net.eval()
-    img = torch.from_numpy(BasicDataset.preprocess(None, full_img, scale_factor, is_mask=False))
+    val_transform = A.Compose(
+    [
+        A.Resize(256, 256),
+        A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+        # A.CLAHE(),
+        ToTensorV2(),
+    ]
+)
+    # img = torch.from_numpy(BasicDataset.preprocess(None, full_img, scale_factor, is_mask=False, transform=None))
+    img = BasicDataset.preprocess(None, full_img, scale_factor, is_mask=False, transform=val_transform)
+    transformed = val_transform(image=img)
+    img = transformed['image']
+    img = img.float().contiguous()
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
 
