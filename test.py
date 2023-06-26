@@ -1,15 +1,30 @@
-from PIL import Image
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np 
+import os
+import re
 
-path_1 = '/home/ericlee/Breast/seg/masks/0_0_before_mask.png'
-path_2 = '/home/ericlee/Pytorch-UNet/_data/masks/0cdf5b5d0ce1_01_mask.gif' 
+folder_path = "/home/ericlee/Pytorch-UNet/test_folder"
+img_files = [f for f in os.listdir(folder_path) if f.endswith(".jpg")]
+mask_files = [f for f in os.listdir(folder_path) if f .endswith(".png")]
 
-img_1 = Image.open(path_1)
-img_2 = Image.open(path_2)
+img_files = sorted(img_files)
+mask_files = sorted(mask_files)
 
-img_1_np = np.array(img_1)
-img_2_np = np.array(img_2)
+print(img_files)
+print(mask_files)
+for img_file, mask_file in zip(img_files, mask_files):
+    print(img_file)
+    print(mask_file)
+    img = plt.imread(os.path.join(folder_path, img_file))
+    mask = plt.imread(os.path.join(folder_path, mask_file))
 
-print(np.unique(img_1_np))
-print(np.unique(img_2_np))
+    x = np.arange(img.shape[1])
+    y = np.arange(img.shape[0])
+    X, Y = np.meshgrid(x, y)
+
+    plt.contour(X, Y, mask, levels=[0.5], color='red', linewidth=2)
+
+    plt.imshow(img, cmap="gray")
+
+    plt.show()
+

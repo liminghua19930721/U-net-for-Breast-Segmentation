@@ -43,13 +43,12 @@ def train_model(
     # 1. Create dataset
     train_transform = A.Compose(
     [
-        A.Resize(256, 256),
+        A.Resize(96, 96),
         A.ShiftScaleRotate(shift_limit=0.2, scale_limit=0.2, rotate_limit=30, p=0.5),
         A.RGBShift(r_shift_limit=25, g_shift_limit=25, b_shift_limit=25, p=0.5),
         A.RandomBrightnessContrast(brightness_limit=0.3, contrast_limit=0.3, p=0.5),
         A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         A.GaussianBlur(blur_limit=(3, 7), sigma_limit=0, always_apply=False, p=0.5),
-        # A.CLAHE(),
         ToTensorV2(),
     ]
 )
@@ -101,6 +100,8 @@ def train_model(
     for epoch in range(1, epochs + 1):
         model.train()
         epoch_loss = 0
+        best_val_score_prev = 0
+        best_val_score_cur = 0
         with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
@@ -156,6 +157,8 @@ def train_model(
 
                         val_score = evaluate(model, val_loader, device, amp)
                         scheduler.step(val_score)
+                        if best_val_score_prev < val_score:
+                            best_val_score_prev = val_score
 
                         logging.info('Validation Dice score: {}'.format(val_score))
                         try:
@@ -173,8 +176,11 @@ def train_model(
                             })
                         except:
                             pass
+            
+        if best_val_score_cur < best_val_score_prev:
+            best_val_score_cur = best_val_score_prev
 
-        if save_checkpoint:
+        if save_checkpoint and best_val_score_cur == best_val_score_prev:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             state_dict = model.state_dict()
             state_dict['mask_values'] = dataset.mask_values
@@ -185,11 +191,11 @@ def train_model(
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
     parser.add_argument('--epochs', '-e', metavar='E', type=int, default=50, help='Number of epochs')
-    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=2, help='Batch size')
-    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
+    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=8, help='Batch size')
+    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-6,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
-    parser.add_argument('--scale', '-s', type=float, default=0.3, help='Downscaling factor of the images')
+    parser.add_argument('--scale', '-s', type=float, default=1, help='Downscaling factor of the images')
     parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')

@@ -22,9 +22,8 @@ def predict_img(net,
     net.eval()
     val_transform = A.Compose(
     [
-        A.Resize(256, 256),
+        A.Resize(96, 96),
         A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-        # A.CLAHE(),
         ToTensorV2(),
     ]
 )
@@ -95,6 +94,12 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     in_files = args.input
+    if len(in_files) == 1 and os.path.isdir(in_files[0]):
+        files = os.listdir(in_files[0])
+        files = [os.path.join(in_files[0], file) for file in files]
+        in_files = files
+        args.input = files
+
     out_files = get_output_filenames(args)
 
     net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
